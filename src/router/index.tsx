@@ -1,103 +1,151 @@
 import { useEffect, useState } from "react";
 import { microfrontends } from "../config/microfrontends";
 
-function getAppUrl(path: string) {
+function joinUrl(baseUrl: string, path: string) {
+  const base = baseUrl.endsWith("/")
+    ? baseUrl.slice(0, -1)
+    : baseUrl;
 
-  if (
-    path === "/" ||
-    path === "/catalog" ||
-    path === "/categories" ||
-    path === "/products" ||
-    path.startsWith("/products/") ||
-    path.startsWith("/product/")
-  ) {
-    let catalogPath = path;
-
-    if (
-      path === "/" ||
-      path === "/catalog"
-    ) {
-      catalogPath = "/";
-    }
-
-    return `${microfrontends.catalog}${catalogPath}`;
+  if (!path || path === "/") {
+    return `${base}/`;
   }
 
-  if (
-    path === "/cart" ||
-    path.startsWith("/cart/")
-  ) {
-    const cartPath =
-      path === "/cart"
-        ? "/"
-        : path.replace(/^\/cart/, "");
-
-    return `${microfrontends.cart}${cartPath}`;
-  }
-
-  if (
-    path === "/account" ||
-    path.startsWith("/account/")
-  ) {
-    const accountPath =
-      path === "/account"
-        ? "/"
-        : path.replace(/^\/account/, "");
-
-    return `${microfrontends.account}${accountPath}`;
-  }
-
-  return `${microfrontends.catalog}/`;
+  return `${base}${path.startsWith("/") ? path : `/${path}`}`;
 }
 
+function getAppUrl(path: string) {
+  const [pathname] = path.split("?");
+
+  // ==========================================
+  // Catalog & Discovery
+  // ==========================================
+  if (
+    pathname === "/" ||
+    pathname === "/catalog" ||
+    pathname === "/categories" ||
+    pathname === "/products" ||
+    pathname.startsWith("/products/") ||
+    pathname.startsWith("/product/")
+  ) {
+    const catalogPath =
+      pathname === "/catalog"
+        ? "/"
+        : path;
+
+    return joinUrl(
+      microfrontends.catalog,
+      catalogPath
+    );
+  }
+
+  // ==========================================
+  // Cart & Checkout
+  // ==========================================
+  if (
+    pathname === "/cart" ||
+    pathname.startsWith("/cart/")
+  ) {
+    const cartPath =
+      pathname === "/cart"
+        ? "/"
+        : path.replace(/^\/cart/, "") || "/";
+
+    return joinUrl(
+      microfrontends.cart,
+      cartPath
+    );
+  }
+
+  // ==========================================
+  // Account & Orders
+  // ==========================================
+  if (
+    pathname === "/account" ||
+    pathname.startsWith("/account/") ||
+    pathname === "/wishlist"
+  ) {
+    let accountPath = path;
+
+    // /account
+    if (pathname === "/account") {
+      accountPath = "/";
+    }
+
+    // /wishlist
+    else if (pathname === "/wishlist") {
+      accountPath = path;
+    }
+
+    // /account/profile
+    // /account/orders
+    // /account/reviews
+    // /account/wishlist
+    else if (pathname.startsWith("/account/")) {
+      accountPath =
+        path.replace(/^\/account/, "") || "/";
+    }
+
+    return joinUrl(
+      microfrontends.account,
+      accountPath
+    );
+  }
+
+  // ==========================================
+  // Fallback
+  // ==========================================
+  return joinUrl(
+    microfrontends.catalog,
+    "/"
+  );
+}
 
 export default function AppRouter() {
+  const getCurrentPath = () => {
+    return (
+      window.location.pathname +
+      window.location.search
+    );
+  };
 
- 
-  const [path, setPath] =
-    useState("/");
+  const [path, setPath] = useState(getCurrentPath);
 
   useEffect(() => {
-
-    window.history.replaceState(
-      {},
-      "",
-      "/"
-    );
-
-    setPath("/");
-
-
+    // Browser Back / Forward
     const handlePopState = () => {
-      const currentPath =
-        window.location.pathname;
-
-      setPath(currentPath);
+      setPath(getCurrentPath());
     };
 
-
-    const handleMessage = (
-      event: MessageEvent
-    ) => {
+    // Navigation messages from Microfrontends
+    const handleMessage = (event: MessageEvent) => {
+      const messageType = event.data?.type;
 
       if (
-        event.data?.type === "NAVIGATE" &&
-        event.data?.path
+        messageType !== "NAVIGATE" &&
+        messageType !== "MICROFRONTEND_NAVIGATE"
       ) {
-
-        const newPath =
-          event.data.path;
-
-        window.history.pushState(
-          {},
-          "",
-          newPath
-        );
-
-        setPath(newPath);
+        return;
       }
-    };
 
+      const newPath = event.data?.path;
+
+      if (
+        typeof newPath !== "string" ||
+        !newPath
+      ) {
+        return;
+      }
+
+      // Update browser URL
+      window.history.pushState(
+        {},
+        "",
+        newPath
+      );
+
+      // Update React state
+      setPath(newPath);
+    };
 
     window.addEventListener(
       "popstate",
@@ -109,9 +157,7 @@ export default function AppRouter() {
       handleMessage
     );
 
-
     return () => {
-
       window.removeEventListener(
         "popstate",
         handlePopState
@@ -122,13 +168,10 @@ export default function AppRouter() {
         handleMessage
       );
     };
-
   }, []);
 
-
-  const appUrl =
-    getAppUrl(path);
-
+  // Determine which Microfrontend should be displayed
+  const appUrl = getAppUrl(path);
 
   return (
     <iframe
@@ -141,6 +184,7 @@ export default function AppRouter() {
         minHeight: "800px",
         border: "none",
         display: "block",
+        background: "#fff",
       }}
     />
   );
