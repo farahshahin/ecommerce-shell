@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import {
   AppBar,
@@ -20,6 +20,8 @@ import {
   ShoppingBagOutlined,
 } from "@mui/icons-material";
 
+const AUTH_KEY = "ElectroShop:isLoggedIn";
+
 const navItems = [
   ["Home", "/"],
   ["Categories", "/categories"],
@@ -31,15 +33,64 @@ const navItems = [
 export default function Navigation() {
   const [open, setOpen] = useState(false);
 
-  const go = (path: string) => {
-    window.history.pushState({}, "", path);
+  const [loggedIn, setLoggedIn] = useState(
+    localStorage.getItem(AUTH_KEY) === "true"
+  );
 
-    window.dispatchEvent(
-      new PopStateEvent("popstate")
+  useEffect(() => {
+    const checkAuth = () => {
+      setLoggedIn(
+        localStorage.getItem(AUTH_KEY) === "true"
+      );
+    };
+
+    checkAuth();
+
+    window.addEventListener(
+      "storage",
+      checkAuth
+    );
+
+    window.addEventListener(
+      "message",
+      checkAuth
+    );
+
+    const interval = setInterval(
+      checkAuth,
+      300
+    );
+
+    return () => {
+      window.removeEventListener(
+        "storage",
+        checkAuth
+      );
+
+      window.removeEventListener(
+        "message",
+        checkAuth
+      );
+
+      clearInterval(interval);
+    };
+  }, []);
+
+  const go = (path: string) => {
+    window.parent.postMessage(
+      {
+        type: "NAVIGATE",
+        path,
+      },
+      "*"
     );
 
     setOpen(false);
   };
+
+  if (!loggedIn) {
+    return null;
+  }
 
   return (
     <>
@@ -226,9 +277,7 @@ export default function Navigation() {
             }}
           >
             <IconButton
-              onClick={() =>
-                go("/account/login")
-              }
+              onClick={() => go("/wishlist")}
               sx={{
                 color: "#526071",
                 width: 36,
